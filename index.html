@@ -16,14 +16,18 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+        
+        /* [중요 수정] 모바일 화면 높이 붕괴를 막는 절대 좌표 레이아웃 */
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: #f9fafb; }
         body { font-family: 'Noto Sans KR', sans-serif; -webkit-tap-highlight-color: transparent; }
         
-        .app-container { height: 100vh; height: -webkit-fill-available; overflow: hidden; }
-        .sidebar-width { width: 100%; height: 50%; }
-        .map-height { height: 50%; }
+        .app-container { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; }
+        
+        .sidebar-width { width: 100%; height: 50%; display: flex; flex-direction: column; }
+        .map-height { height: 50%; position: relative; }
         @media (min-width: 768px) {
             .sidebar-width { width: 450px; height: 100%; }
-            .map-height { height: 100%; }
+            .map-height { height: 100%; flex: 1; }
         }
         
         .custom-marker {
@@ -45,7 +49,7 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="bg-gray-50 app-container relative text-gray-800">
+<body class="app-container text-gray-800">
 
     <div id="loading-overlay" class="fixed inset-0 bg-blue-900 z-[100] flex flex-col items-center justify-center text-white transition-opacity duration-300">
         <i class="fa-solid fa-cloud-arrow-down text-5xl mb-4"></i>
@@ -65,8 +69,9 @@
             <p class="text-blue-200 font-medium opacity-90">런던 ➔ 암스테르담 (7.24 ~ 8.1)</p>
         </div>
 
-        <div class="flex-1 overflow-y-auto w-full">
-            <div class="max-w-lg mx-auto px-6 py-10 flex flex-col gap-5">
+        <!-- 내용이 무조건 늘어나도록 flex-1 강제 -->
+        <div class="flex-1 overflow-y-auto w-full relative">
+            <div class="max-w-lg mx-auto px-6 py-10 flex flex-col gap-5 pb-20">
                 <button onclick="switchView('view-map')" class="group relative bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-5 hover:shadow-md hover:border-blue-200 transition text-left active:scale-95">
                     <div class="w-16 h-16 shrink-0 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-2xl shadow-inner group-hover:scale-110 transition"><i class="fa-solid fa-map-location-dot"></i></div>
                     <div>
@@ -96,7 +101,7 @@
 
     <!-- 2. MAP VIEW -->
     <div id="view-map" class="absolute inset-0 z-30 hidden flex flex-col md:flex-row bg-white">
-        <div class="sidebar-width bg-white shadow-xl flex flex-col z-20 shrink-0">
+        <div class="sidebar-width bg-white shadow-xl shrink-0 z-20">
             <div class="p-4 bg-blue-900 text-white shadow-md flex items-center justify-between shrink-0">
                 <div class="flex items-center gap-3">
                     <button onclick="switchView('view-home')" class="p-2 bg-white/20 rounded-full w-10 h-10 flex items-center justify-center active:scale-95"><i class="fa-solid fa-arrow-left"></i></button>
@@ -104,9 +109,11 @@
                 </div>
             </div>
             <div class="flex overflow-x-auto bg-gray-100 border-b no-scrollbar shrink-0" id="map-tabs"></div>
-            <div id="schedule-list" class="flex-1 overflow-y-auto p-4 bg-gray-50 pb-20"></div>
+            <div id="schedule-list" class="flex-1 overflow-y-auto p-4 bg-gray-50 pb-20 relative"></div>
         </div>
-        <div class="map-height md:h-full relative w-full md:flex-1"><div id="map" class="w-full h-full z-10"></div></div>
+        <div class="map-height md:h-full relative w-full md:flex-1 shrink-0">
+            <div id="map" class="absolute inset-0 z-10"></div>
+        </div>
     </div>
 
     <!-- 3. MANAGE VIEW -->
@@ -120,7 +127,7 @@
                 <i class="fa-solid fa-plus"></i> 장소
             </button>
         </div>
-        <div class="flex-1 overflow-y-auto p-4 w-full">
+        <div class="flex-1 overflow-y-auto p-4 w-full relative">
             <div class="max-w-2xl mx-auto pb-20" id="manage-board"></div>
         </div>
     </div>
@@ -243,7 +250,6 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- 완전히 독립적인 로컬 스크립트로 변경 (type="module" 제거) -->
     <script>
         // 기본 9일치 데이터 구조
         const defaultAppData = {
@@ -265,6 +271,7 @@
         let sortables = [];
         let currentActiveView = 'view-home';
         window.isAppReady = false;
+        let isMapInitialized = false; // 지도 중복 초기화 방지
 
         function showToast(msg) {
             const t = document.getElementById('toast');
@@ -276,7 +283,7 @@
         function hideLoadingOverlay() {
             if (window.isAppReady) return;
             totalDays = Object.keys(appData).length || 9;
-            initMapUI();
+            initSelectOptions();
             
             const overlay = document.getElementById('loading-overlay');
             if(overlay) overlay.classList.add('opacity-0');
@@ -289,6 +296,7 @@
         }
         
         function initData() {
+            // 원본 데이터 복사
             appData = JSON.parse(JSON.stringify(defaultAppData));
             let savedData = null;
             
@@ -299,12 +307,15 @@
                 try {
                     const parsed = JSON.parse(savedData);
                     if (parsed && typeof parsed === 'object') {
-                        for (let key in parsed) {
-                            appData[key] = parsed[key];
-                            if (!appData[key].locations) appData[key].locations = [];
+                        // 1~9일차 데이터를 안전하게 덮어쓰기
+                        for (let i = 1; i <= 9; i++) {
+                            if (parsed[i]) {
+                                appData[i] = parsed[i];
+                                if (!appData[i].locations) appData[i].locations = [];
+                            }
                         }
                     }
-                } catch(e) {}
+                } catch(e) { console.error("데이터 파싱 에러:", e); }
             }
 
             try { localStorage.setItem('myTripData', JSON.stringify(appData)); } catch(e) {}
@@ -361,9 +372,11 @@
                 if (decodedData && typeof decodedData === 'object' && Object.keys(decodedData).length > 0) {
                     if(confirm('내 휴대폰의 기존 일정이 지워지고, 받은 일정으로 덮어씌워집니다. 계속할까요?')) {
                         appData = JSON.parse(JSON.stringify(defaultAppData));
-                        for (let key in decodedData) {
-                            appData[key] = decodedData[key];
-                            if (!appData[key].locations) appData[key].locations = [];
+                        for (let i = 1; i <= 9; i++) {
+                            if(decodedData[i]) {
+                                appData[i] = decodedData[i];
+                                if (!appData[i].locations) appData[i].locations = [];
+                            }
                         }
                         
                         syncDataToCloud(); 
@@ -380,12 +393,22 @@
             }
         }
 
+        // 지도를 렌더링하기 직전에 호출하여 안전성 확보
         function initMapUI() {
-            map = L.map('map', { zoomControl: false }).setView([51.5074, -0.1278], 12);
-            L.control.zoom({ position: 'topright' }).addTo(map);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            currentLayerGroup = L.layerGroup().addTo(map);
-            initSelectOptions();
+            if (isMapInitialized) return;
+            try {
+                if (typeof L === 'undefined') {
+                    showToast("지도 서버 점검 중입니다. 잠시 후 다시 시도해주세요.");
+                    return;
+                }
+                map = L.map('map', { zoomControl: false }).setView([51.5074, -0.1278], 12);
+                L.control.zoom({ position: 'topright' }).addTo(map);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                currentLayerGroup = L.layerGroup().addTo(map);
+                isMapInitialized = true;
+            } catch(e) {
+                console.error("Map Error:", e);
+            }
         }
 
         function initSelectOptions() {
@@ -409,19 +432,25 @@
         }
 
         function switchView(viewId) {
-            document.getElementById('view-home').classList.add('hidden');
-            document.getElementById('view-map').classList.add('hidden');
-            document.getElementById('view-manage').classList.add('hidden');
-            document.getElementById(viewId).classList.remove('hidden');
-            
-            currentActiveView = viewId;
+            try {
+                document.getElementById('view-home').classList.add('hidden');
+                document.getElementById('view-map').classList.add('hidden');
+                document.getElementById('view-manage').classList.add('hidden');
+                document.getElementById(viewId).classList.remove('hidden');
+                
+                currentActiveView = viewId;
 
-            if (viewId === 'view-map') {
-                setTimeout(() => { if(map) map.invalidateSize(); }, 50);
-                renderMapTabs();
-                selectMapDay(currentDay);
-            } else if (viewId === 'view-manage') {
-                renderManageBoard();
+                if (viewId === 'view-map') {
+                    initMapUI(); // 지도를 켤 때 최초 1회 안전하게 초기화
+                    setTimeout(() => { if(map) map.invalidateSize(); }, 50);
+                    renderMapTabs();
+                    selectMapDay(currentDay);
+                } else if (viewId === 'view-manage') {
+                    renderManageBoard();
+                }
+            } catch(e) {
+                console.error("View Switch Error:", e);
+                showToast("화면 전환 중 오류가 발생했습니다.");
             }
         }
 
@@ -448,7 +477,9 @@
             let html = `<h2 class="text-lg font-bold text-gray-800 mb-4">${data.date} <span class="text-sm font-normal text-gray-500 ml-2">${data.title}</span></h2>`;
             if (!data.locations || data.locations.length === 0) html += `<div class="text-center py-10 text-gray-400">등록된 일정이 없습니다.</div>`;
             
-            currentLayerGroup.clearLayers();
+            if (currentLayerGroup) {
+                currentLayerGroup.clearLayers();
+            }
             const bounds = L.latLngBounds();
 
             (data.locations || []).forEach((loc, index) => {
@@ -467,26 +498,32 @@
                         </div>
                     </div>`;
 
-                const icon = L.divIcon({ className: 'custom-div-icon', html: `<div class="custom-marker">${index + 1}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
-                const marker = L.marker([loc.lat, loc.lng], { icon: icon }).bindPopup(`<b>${loc.name}</b>`);
-                currentLayerGroup.addLayer(marker);
-                bounds.extend([loc.lat, loc.lng]);
+                if (currentLayerGroup) {
+                    const icon = L.divIcon({ className: 'custom-div-icon', html: `<div class="custom-marker">${index + 1}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
+                    const marker = L.marker([loc.lat, loc.lng], { icon: icon }).bindPopup(`<b>${loc.name}</b>`);
+                    currentLayerGroup.addLayer(marker);
+                    bounds.extend([loc.lat, loc.lng]);
 
-                if (index < data.locations.length - 1) {
-                    const nextLoc = data.locations[index + 1];
-                    const polyline = L.polyline([[loc.lat, loc.lng], [nextLoc.lat, nextLoc.lng]], { color: '#3b82f6', weight: 3, dashArray: '8, 8', opacity: 0.8 });
-                    currentLayerGroup.addLayer(polyline);
+                    if (index < data.locations.length - 1) {
+                        const nextLoc = data.locations[index + 1];
+                        const polyline = L.polyline([[loc.lat, loc.lng], [nextLoc.lat, nextLoc.lng]], { color: '#3b82f6', weight: 3, dashArray: '8, 8', opacity: 0.8 });
+                        currentLayerGroup.addLayer(polyline);
+                    }
                 }
             });
+            
             document.getElementById('schedule-list').innerHTML = html;
-            if((data.locations || []).length > 0) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            if(map && (data.locations || []).length > 0) {
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            }
         }
 
         function renderManageBoard() {
             const board = document.getElementById('manage-board');
-            let html = '';
+            if(!board) return;
             
-            sortables.forEach(s => s.destroy());
+            let html = '';
+            sortables.forEach(s => { try { s.destroy(); } catch(e){} });
             sortables = [];
 
             for(let i=1; i<=totalDays; i++) {
@@ -494,7 +531,7 @@
                 if(!data) continue; 
                 
                 html += `
-                <div class="mb-5 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="mb-5 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden shrink-0">
                     <div class="bg-gray-100 px-4 py-3 border-b font-bold text-gray-700 flex justify-between items-center">
                         <span>${i}일차 <span class="text-xs font-normal text-gray-500 ml-1">${data.date}</span></span>
                         <span class="text-xs font-bold text-purple-600 bg-purple-100 px-2 py-1 rounded-md">${data.title}</span>
@@ -521,45 +558,51 @@
             }
             board.innerHTML = html;
 
-            document.querySelectorAll('.sortable-list').forEach(el => {
-                const sortable = new Sortable(el, {
-                    group: 'shared',
-                    animation: 150,
-                    handle: '.drag-handle',
-                    ghostClass: 'sortable-ghost',
-                    onEnd: function (evt) {
-                        const oldDay = evt.from.dataset.day;
-                        const newDay = evt.to.dataset.day;
-                        const oldIndex = evt.oldIndex;
-                        const newIndex = evt.newIndex;
-                        
-                        const item = appData[oldDay].locations.splice(oldIndex, 1)[0];
-                        if(!appData[newDay].locations) appData[newDay].locations = [];
-                        appData[newDay].locations.splice(newIndex, 0, item);
-                        
-                        syncDataToCloud();
-                        renderManageBoard();
-                    }
+            if (typeof Sortable !== 'undefined') {
+                document.querySelectorAll('.sortable-list').forEach(el => {
+                    try {
+                        const sortable = new Sortable(el, {
+                            group: 'shared',
+                            animation: 150,
+                            handle: '.drag-handle',
+                            ghostClass: 'sortable-ghost',
+                            onEnd: function (evt) {
+                                const oldDay = evt.from.dataset.day;
+                                const newDay = evt.to.dataset.day;
+                                const oldIndex = evt.oldIndex;
+                                const newIndex = evt.newIndex;
+                                
+                                const item = appData[oldDay].locations.splice(oldIndex, 1)[0];
+                                if(!appData[newDay].locations) appData[newDay].locations = [];
+                                appData[newDay].locations.splice(newIndex, 0, item);
+                                
+                                syncDataToCloud();
+                                renderManageBoard();
+                            }
+                        });
+                        sortables.push(sortable);
+                    } catch(e) {}
                 });
-                sortables.push(sortable);
-            });
+            }
         }
 
         function initModalMap() {
-            if(!modalMap) {
-                modalMap = L.map('modal-map', { zoomControl: false }).setView([51.5074, -0.1278], 12);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(modalMap);
-                modalMarker = L.marker([51.5074, -0.1278], { draggable: true }).addTo(modalMap);
-                
-                modalMarker.on('dragend', function () {
-                    document.getElementById('modal-lat').value = modalMarker.getLatLng().lat;
-                    document.getElementById('modal-lng').value = modalMarker.getLatLng().lng;
-                });
-                modalMap.on('click', function(e) {
-                    modalMarker.setLatLng(e.latlng);
-                    document.getElementById('modal-lat').value = e.latlng.lat;
-                    document.getElementById('modal-lng').value = e.latlng.lng;
-                });
+            if(!modalMap && typeof L !== 'undefined') {
+                try {
+                    modalMap = L.map('modal-map', { zoomControl: false }).setView([51.5074, -0.1278], 12);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(modalMap);
+                    modalMarker = L.marker([51.5074, -0.1278], { draggable: true }).addTo(modalMap);
+                    
+                    modalMarker.on('dragend', function () {
+                        document.getElementById('modal-lat').value = modalMarker.getLatLng().lat;
+                        document.getElementById('modal-lng').value = modalMarker.getLatLng().lng;
+                    });
+                    modalMap.on('click', function(e) {
+                        modalMarker.setLatLng(e.latlng);
+                        document.getElementById('modal-lat').value = e.latlng.lat;
+                        document.getElementById('modal-lng').value = e.latlng.lng;
+                    });
+                } catch(e) { console.warn("Modal map error", e); }
             }
         }
 
@@ -578,8 +621,10 @@
                     const lat = parseFloat(data[0].lat);
                     const lng = parseFloat(data[0].lon);
                     
-                    modalMap.setView([lat, lng], 15);
-                    modalMarker.setLatLng([lat, lng]);
+                    if(modalMap) {
+                        modalMap.setView([lat, lng], 15);
+                        modalMarker.setLatLng([lat, lng]);
+                    }
                     document.getElementById('modal-lat').value = lat;
                     document.getElementById('modal-lng').value = lng;
                     
