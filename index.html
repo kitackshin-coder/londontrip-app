@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>유럽 여행 일정</title>
+    <title>유럽 여행 일정 (저장 지원)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -18,16 +18,12 @@
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
         body { font-family: 'Noto Sans KR', sans-serif; -webkit-tap-highlight-color: transparent; }
         
-        .app-container { height: 100vh; overflow: hidden; }
-        @supports (-webkit-touch-callout: none) {
-            .app-container { height: -webkit-fill-available; }
-        }
-        
+        .app-container { height: 100vh; height: -webkit-fill-available; overflow: hidden; }
         .sidebar-width { width: 100%; height: 50%; }
         .map-height { height: 50%; }
         @media (min-width: 768px) {
             .sidebar-width { width: 450px; height: 100%; }
-            .map-height { height: 100%; flex: 1; }
+            .map-height { height: 100%; }
         }
         
         .custom-marker {
@@ -45,14 +41,13 @@
         .drag-handle:active { cursor: grabbing; }
         
         #modal-map { height: 200px; width: 100%; border-radius: 0.5rem; z-index: 10; }
-        
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-50 app-container relative text-gray-800">
 
-    <div id="loading-overlay" class="fixed inset-0 bg-blue-900 z-[100] flex flex-col items-center justify-center text-white transition-opacity duration-500">
+    <div id="loading-overlay" class="fixed inset-0 bg-blue-900 z-[100] flex flex-col items-center justify-center text-white transition-opacity duration-300">
         <i class="fa-solid fa-cloud-arrow-down text-5xl mb-4"></i>
         <h2 class="text-xl font-bold mb-2">여행 일정 준비 중...</h2>
         <div class="loader mt-4"></div>
@@ -62,18 +57,16 @@
 
     <!-- 1. HOME VIEW -->
     <div id="view-home" class="absolute inset-0 z-40 bg-gray-50 flex flex-col transition-opacity duration-300 opacity-0 hidden">
-        <div class="shrink-0 pt-12 pb-8 px-6 bg-blue-900 text-white rounded-b-3xl shadow-lg relative">
-            <div id="sync-status" class="absolute top-4 right-6 text-xs bg-gray-700 px-3 py-1 rounded-full flex items-center gap-2">
-                <div class="w-2 h-2 bg-yellow-400 rounded-full"></div> 오프라인 모드
+        <div class="pt-12 pb-8 px-6 bg-blue-900 text-white rounded-b-3xl shadow-lg relative shrink-0">
+            <div id="sync-status" class="absolute top-4 right-6 text-xs px-3 py-1 rounded-full flex items-center gap-2 bg-gray-700">
+                <div class="w-2 h-2 rounded-full bg-yellow-400"></div> 개인 저장 모드
             </div>
-            <div class="max-w-2xl mx-auto">
-                <h1 class="text-3xl font-black mb-2 tracking-tight mt-4"><i class="fa-solid fa-plane-departure mr-2"></i>유럽 여행</h1>
-                <p class="text-blue-200 font-medium opacity-90">런던 ➔ 암스테르담 (7.24 ~ 8.1)</p>
-            </div>
+            <h1 class="text-3xl font-black mb-2 tracking-tight mt-4"><i class="fa-solid fa-plane-departure mr-2"></i>유럽 여행</h1>
+            <p class="text-blue-200 font-medium opacity-90">런던 ➔ 암스테르담 (7.24 ~ 8.1)</p>
         </div>
 
-        <div class="flex-1 w-full overflow-y-auto">
-            <div class="max-w-lg mx-auto px-6 py-10 flex flex-col gap-6">
+        <div class="flex-1 overflow-y-auto w-full">
+            <div class="max-w-lg mx-auto px-6 py-10 flex flex-col gap-5">
                 <button onclick="switchView('view-map')" class="group relative bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-5 hover:shadow-md hover:border-blue-200 transition text-left active:scale-95">
                     <div class="w-16 h-16 shrink-0 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-2xl shadow-inner group-hover:scale-110 transition"><i class="fa-solid fa-map-location-dot"></i></div>
                     <div>
@@ -89,6 +82,14 @@
                         <p class="text-sm text-gray-500">일정을 편집하고 장소를 추가합니다.</p>
                     </div>
                 </button>
+
+                <button onclick="openShareModal()" class="group relative bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-5 hover:shadow-md hover:border-green-200 transition text-left active:scale-95">
+                    <div class="w-16 h-16 shrink-0 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-2xl shadow-inner group-hover:scale-110 transition"><i class="fa-solid fa-share-nodes"></i></div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 mb-1">카톡으로 일정 맞추기</h3>
+                        <p class="text-sm text-gray-500">데이터를 카톡으로 보내 일정을 동기화합니다.</p>
+                    </div>
+                </button>
             </div>
         </div>
     </div>
@@ -96,13 +97,13 @@
     <!-- 2. MAP VIEW -->
     <div id="view-map" class="absolute inset-0 z-30 hidden flex flex-col md:flex-row bg-white">
         <div class="sidebar-width bg-white shadow-xl flex flex-col z-20 shrink-0">
-            <div class="shrink-0 p-4 bg-blue-900 text-white shadow-md flex items-center justify-between">
+            <div class="p-4 bg-blue-900 text-white shadow-md flex items-center justify-between shrink-0">
                 <div class="flex items-center gap-3">
                     <button onclick="switchView('view-home')" class="p-2 bg-white/20 rounded-full w-10 h-10 flex items-center justify-center active:scale-95"><i class="fa-solid fa-arrow-left"></i></button>
                     <h1 class="text-lg font-bold">지도 일정</h1>
                 </div>
             </div>
-            <div class="shrink-0 flex overflow-x-auto bg-gray-100 border-b no-scrollbar" id="map-tabs"></div>
+            <div class="flex overflow-x-auto bg-gray-100 border-b no-scrollbar shrink-0" id="map-tabs"></div>
             <div id="schedule-list" class="flex-1 overflow-y-auto p-4 bg-gray-50 pb-20"></div>
         </div>
         <div class="map-height md:h-full relative w-full md:flex-1"><div id="map" class="w-full h-full z-10"></div></div>
@@ -110,7 +111,7 @@
 
     <!-- 3. MANAGE VIEW -->
     <div id="view-manage" class="absolute inset-0 z-30 hidden flex flex-col bg-gray-50">
-        <div class="shrink-0 p-4 bg-purple-900 text-white shadow-md flex items-center justify-between">
+        <div class="p-4 bg-purple-900 text-white shadow-md flex items-center justify-between shrink-0">
             <div class="flex items-center gap-3">
                 <button onclick="switchView('view-home')" class="p-2 bg-white/20 rounded-full w-10 h-10 flex items-center justify-center active:scale-95"><i class="fa-solid fa-arrow-left"></i></button>
                 <h1 class="text-lg font-bold">일정 관리</h1>
@@ -119,13 +120,38 @@
                 <i class="fa-solid fa-plus"></i> 장소
             </button>
         </div>
-        
         <div class="flex-1 overflow-y-auto p-4 w-full">
             <div class="max-w-2xl mx-auto pb-20" id="manage-board"></div>
         </div>
     </div>
 
-    <!-- 모달: 장소 검색 및 추가 -->
+    <!-- 모달: 데이터 공유 (수동 동기화) -->
+    <div id="share-modal" class="hidden fixed inset-0 z-[60] bg-black/60 flex items-end md:items-center justify-center p-0 md:p-4 transition-opacity">
+        <div class="bg-white w-full max-h-[90vh] md:h-auto md:max-w-lg rounded-t-2xl md:rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50 shrink-0">
+                <h3 class="text-lg font-bold text-gray-900"><i class="fa-solid fa-share-nodes text-green-600 mr-2"></i>카카오톡 동기화</h3>
+                <button onclick="closeShareModal()" class="text-gray-400 hover:text-gray-700 text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 overflow-y-auto flex-1 space-y-4">
+                <p class="text-sm text-gray-600 leading-relaxed bg-green-50 p-3 rounded-lg border border-green-100">
+                    <b>보내는 사람:</b> [코드 복사하기]를 눌러 코드를 카톡방에 보내세요.<br>
+                    <b>받는 사람:</b> 카톡에 올라온 코드를 복사해서 아래 빈칸에 적용하세요!
+                </p>
+                <textarea id="share-code" rows="4" placeholder="여기에 친구가 보낸 암호 코드를 붙여넣으세요..." class="w-full bg-white border-2 border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:border-green-500 font-mono text-gray-500 break-all"></textarea>
+                
+                <div class="flex flex-col gap-3 pt-2">
+                    <button onclick="copyMyData()" class="w-full bg-gray-800 text-white font-bold py-3.5 rounded-xl active:scale-95 transition shadow-md flex items-center justify-center gap-2">
+                        <i class="fa-regular fa-copy text-lg"></i> 내 일정 코드 복사하기
+                    </button>
+                    <button onclick="importSharedData()" class="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl active:scale-95 transition shadow-md flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-download text-lg"></i> 붙여넣은 코드로 덮어쓰기
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 모달: 장소 추가 -->
     <div id="edit-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center p-0 md:p-4 transition-opacity">
         <div class="bg-white w-full max-h-[90vh] md:h-auto md:max-w-lg rounded-t-2xl md:rounded-2xl flex flex-col shadow-2xl overflow-hidden">
             <div class="p-4 border-b flex justify-between items-center bg-gray-50 shrink-0">
@@ -139,15 +165,12 @@
                 <div class="bg-purple-50 p-3 rounded-lg border border-purple-100">
                     <label class="block text-xs font-bold text-purple-800 mb-1">장소 검색</label>
                     <div class="flex gap-2">
-                        <input type="text" id="place-search" placeholder="예: Amsterdam Centraal" class="flex-1 bg-white border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" onkeypress="if(event.key === 'Enter') searchPlace()">
+                        <input type="text" id="place-search" placeholder="예: Amsterdam Centraal" class="flex-1 bg-white border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none" onkeypress="if(event.key === 'Enter') searchPlace()">
                         <button onclick="searchPlace()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold active:scale-95 flex items-center justify-center w-12"><i class="fa-solid fa-magnifying-glass"></i></button>
                     </div>
                 </div>
 
-                <div class="relative border border-gray-200 rounded-lg overflow-hidden shrink-0">
-                    <div id="modal-map"></div>
-                </div>
-
+                <div class="relative border border-gray-200 rounded-lg overflow-hidden shrink-0"><div id="modal-map"></div></div>
                 <div class="flex gap-2 hidden"><input type="number" id="modal-lat"><input type="number" id="modal-lng"></div>
 
                 <div class="space-y-3 pt-2">
@@ -178,7 +201,6 @@
         </div>
     </div>
 
-    <!-- 모달: 삭제 확인 -->
     <div id="confirm-modal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full text-center">
             <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4"><i class="fa-solid fa-triangle-exclamation"></i></div>
@@ -191,15 +213,39 @@
         </div>
     </div>
 
+    <!-- 외부 스크립트 실행 실패를 대비한 완벽한 안전망 (Watchdog) -->
+    <script>
+        function forceStartApp() {
+            var overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.classList.add('opacity-0');
+                setTimeout(function() {
+                    overlay.classList.add('hidden');
+                    var home = document.getElementById('view-home');
+                    if(home) {
+                        home.classList.remove('hidden');
+                        setTimeout(function() { home.classList.remove('opacity-0'); }, 50);
+                    }
+                }, 300);
+            }
+        }
+
+        setTimeout(function() {
+            if (typeof isAppReady === 'undefined' || !isAppReady) {
+                var overlay = document.getElementById('loading-overlay');
+                if (overlay) {
+                    overlay.innerHTML = '<div class="text-center px-6"><i class="fa-solid fa-triangle-exclamation text-5xl mb-4 text-yellow-400"></i><br><h2 class="text-xl font-bold mb-2">접속 대기 지연</h2><p class="text-sm opacity-80 mb-6 mt-2">브라우저 보안 설정으로 인해<br>로딩이 지연되고 있습니다.</p><button onclick="forceStartApp()" class="bg-blue-600 text-white px-8 py-3 rounded-full font-bold shadow-md active:scale-95 transition">화면 강제 열기</button></div>';
+                }
+            }
+        }, 3000); 
+    </script>
+    
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <!-- App Logic Script -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+    <!-- 완전히 독립적인 로컬 스크립트로 변경 (type="module" 제거) -->
+    <script>
+        // 기본 9일치 데이터 구조
         const defaultAppData = {
             1: { date: "7.24 (금)", title: "런던 도착", locations: [ { id: 101, name: "히드로 공항", lat: 51.4700, lng: -0.4543, time: "17:20", desc: "쓰리심 픽업, 코스타 대기" }, { id: 102, name: "킴튼 피츠로이 호텔", lat: 51.5225, lng: -0.1251, time: "19:00", desc: "체크인 및 휴식" } ] },
             2: { date: "7.25 (토)", title: "시내 투어", locations: [ { id: 201, name: "웨스트민스터역 4번출구", lat: 51.5014, lng: -0.1250, time: "08:40", desc: "카페 네로 앞 가이드 미팅" }, { id: 202, name: "대영박물관", lat: 51.5194, lng: -0.1270, time: "13:30", desc: "정문 건너편 스벅 (쉑쉑버거)" } ] },
@@ -212,100 +258,127 @@
             9: { date: "8.1 (토)", title: "풍차마을 & 귀국", locations: [ { id: 901, name: "암스테르담 중앙역", lat: 52.3791, lng: 4.9003, time: "12:00", desc: "체크아웃 후 이동" }, { id: 902, name: "잔담 (Zaandam)", lat: 52.4420, lng: 4.8292, time: "13:00", desc: "레고마을" }, { id: 903, name: "잔세스칸스", lat: 52.4731, lng: 4.8193, time: "14:30", desc: "풍차마을" }, { id: 904, name: "스키폴 공항", lat: 52.3105, lng: 4.7683, time: "18:30", desc: "21:30 KE926 출발" } ] }
         };
 
-        let appData = defaultAppData; // 기본적으로 로컬 데이터 세팅
+        let appData = null;
         let currentDay = 1;
         let totalDays = 9;
-        let map, currentLayerGroup;
-        let modalMap, modalMarker;
+        let map, currentLayerGroup, modalMap, modalMarker;
         let sortables = [];
-        let isAppReady = false;
         let currentActiveView = 'view-home';
-        let dbRef = null;
+        window.isAppReady = false;
 
-        window.showToast = function(msg) {
+        function showToast(msg) {
             const t = document.getElementById('toast');
             t.innerText = msg;
             t.classList.remove('opacity-0');
             setTimeout(() => t.classList.add('opacity-0'), 2500);
         }
 
-        // 로딩 해제 함수
         function hideLoadingOverlay() {
-            if (isAppReady) return;
-            totalDays = Object.keys(appData).length;
+            if (window.isAppReady) return;
+            totalDays = Object.keys(appData).length || 9;
             initMapUI();
             
             const overlay = document.getElementById('loading-overlay');
-            overlay.classList.add('opacity-0');
+            if(overlay) overlay.classList.add('opacity-0');
             setTimeout(() => {
-                overlay.classList.add('hidden');
+                if(overlay) overlay.classList.add('hidden');
                 document.getElementById('view-home').classList.remove('hidden');
                 setTimeout(() => document.getElementById('view-home').classList.remove('opacity-0'), 50);
             }, 300);
-            isAppReady = true;
+            window.isAppReady = true;
         }
-
-        async function initCloudSync() {
-            try {
-                // 클라우드 설정값 확인 (GitHub Pages 등 외부 브라우저에서는 비어있음)
-                let firebaseConfig = {};
-                try { if (typeof __firebase_config !== 'undefined') firebaseConfig = JSON.parse(__firebase_config); } catch(e) {}
-
-                if (Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("클라우드 설정 없음 (로컬 환경)");
-                }
-
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'trip-app-id';
-                const app = initializeApp(firebaseConfig);
-                const auth = getAuth(app);
-                const db = getFirestore(app);
-
-                // 인증 시도
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // 데이터베이스 연결
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        dbRef = doc(db, 'artifacts', appId, 'public', 'data', 'itinerary', 'shared');
-                        document.getElementById('sync-status').innerHTML = '<div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div> 실시간 동기화 중';
-                        document.getElementById('sync-status').classList.replace('bg-gray-700', 'bg-blue-800');
-
-                        onSnapshot(dbRef, (snapshot) => {
-                            if (snapshot.exists()) {
-                                appData = snapshot.data();
-                            } else {
-                                setDoc(dbRef, defaultAppData);
-                            }
-                            hideLoadingOverlay();
-                            refreshCurrentView();
-                        });
-                    }
-                });
-            } catch (error) {
-                // 외부 브라우저(GitHub Pages)일 경우 에러를 무시하고 즉시 로컬 데이터로 실행
-                console.log("오프라인/로컬 모드로 전환합니다.");
-                hideLoadingOverlay();
-            }
-        }
-
-        // 앱 시작: 클라우드 연결 시도 및 실패시 즉각 로컬 화면 전환
-        initCloudSync();
         
-        // 1.5초 이상 지연될 경우 강제로 로딩창 해제 (무한 로딩 방지 백업)
-        setTimeout(() => { hideLoadingOverlay(); }, 1500);
+        function initData() {
+            appData = JSON.parse(JSON.stringify(defaultAppData));
+            let savedData = null;
+            
+            try { savedData = localStorage.getItem('myTripData'); } 
+            catch(e) { console.warn("로컬 스토리지 접근 차단됨."); }
 
-        async function syncDataToCloud() {
+            if (savedData) {
+                try {
+                    const parsed = JSON.parse(savedData);
+                    if (parsed && typeof parsed === 'object') {
+                        for (let key in parsed) {
+                            appData[key] = parsed[key];
+                            if (!appData[key].locations) appData[key].locations = [];
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            try { localStorage.setItem('myTripData', JSON.stringify(appData)); } catch(e) {}
+            hideLoadingOverlay();
+        }
+
+        // 즉시 데이터 불러오기 실행
+        initData();
+
+        function syncDataToCloud() {
             if(!appData) return;
-            if (dbRef) {
-                try { await setDoc(dbRef, appData); } catch(e) { console.log("클라우드 저장 실패", e); }
+            try { localStorage.setItem('myTripData', JSON.stringify(appData)); } 
+            catch(e) {}
+        }
+
+        function openShareModal() {
+            document.getElementById('share-code').value = '';
+            document.getElementById('share-modal').classList.remove('hidden');
+        }
+
+        function closeShareModal() {
+            document.getElementById('share-modal').classList.add('hidden');
+        }
+
+        function copyMyData() {
+            try {
+                const dataString = JSON.stringify(appData);
+                const base64Data = btoa(encodeURIComponent(dataString));
+                const shareText = "✈️우리가족 유럽여행 일정✈️\n아래 암호 코드를 복사해서 일정 앱의 [카톡으로 일정 맞추기] 메뉴에 붙여넣으세요!\n\n" + base64Data;
+                
+                navigator.clipboard.writeText(shareText).then(() => {
+                    showToast('복사 성공! 카카오톡 방에 붙여넣기 하세요.');
+                }).catch(err => {
+                    document.getElementById('share-code').value = shareText;
+                    document.getElementById('share-code').select();
+                    showToast('위 코드가 생성되었습니다. 직접 전체 복사해주세요.');
+                });
+            } catch(e) {
+                showToast('코드 생성 중 오류가 발생했습니다.');
             }
         }
 
-        // ------------------ UI 및 로직 함수들 ------------------
+        function importSharedData() {
+            let input = document.getElementById('share-code').value.trim();
+            if(!input) { showToast('친구에게 받은 코드를 붙여넣어주세요.'); return; }
+            
+            try {
+                const lines = input.split('\n');
+                let codeToParse = lines[lines.length - 1].trim(); 
+                if (!codeToParse) codeToParse = input; 
+                
+                const decodedData = JSON.parse(decodeURIComponent(atob(codeToParse)));
+                
+                if (decodedData && typeof decodedData === 'object' && Object.keys(decodedData).length > 0) {
+                    if(confirm('내 휴대폰의 기존 일정이 지워지고, 받은 일정으로 덮어씌워집니다. 계속할까요?')) {
+                        appData = JSON.parse(JSON.stringify(defaultAppData));
+                        for (let key in decodedData) {
+                            appData[key] = decodedData[key];
+                            if (!appData[key].locations) appData[key].locations = [];
+                        }
+                        
+                        syncDataToCloud(); 
+                        closeShareModal();
+                        refreshCurrentView();
+                        showToast('🎉 일정이 친구와 동기화되었습니다!');
+                    }
+                } else {
+                    showToast('잘못된 형식의 코드입니다.');
+                }
+            } catch(e) {
+                console.error(e);
+                showToast('유효하지 않은 코드입니다. 전체 텍스트를 빠짐없이 복사했는지 확인하세요.');
+            }
+        }
 
         function initMapUI() {
             map = L.map('map', { zoomControl: false }).setView([51.5074, -0.1278], 12);
@@ -315,7 +388,18 @@
             initSelectOptions();
         }
 
-        window.refreshCurrentView = function() {
+        function initSelectOptions() {
+            const select = document.getElementById('modal-day-select');
+            if(!select) return;
+            let html = '';
+            for(let i=1; i<=totalDays; i++) {
+                const dateStr = appData[i] ? appData[i].date : '';
+                html += `<option value="${i}">${i}일차 ${dateStr ? '('+dateStr+')' : ''}</option>`;
+            }
+            select.innerHTML = html;
+        }
+
+        function refreshCurrentView() {
             if(currentActiveView === 'view-map') {
                 renderMapTabs();
                 selectMapDay(currentDay);
@@ -324,7 +408,7 @@
             }
         }
 
-        window.switchView = function(viewId) {
+        function switchView(viewId) {
             document.getElementById('view-home').classList.add('hidden');
             document.getElementById('view-map').classList.add('hidden');
             document.getElementById('view-manage').classList.add('hidden');
@@ -333,7 +417,7 @@
             currentActiveView = viewId;
 
             if (viewId === 'view-map') {
-                setTimeout(() => map.invalidateSize(), 50);
+                setTimeout(() => { if(map) map.invalidateSize(); }, 50);
                 renderMapTabs();
                 selectMapDay(currentDay);
             } else if (viewId === 'view-manage') {
@@ -341,22 +425,15 @@
             }
         }
 
-        function initSelectOptions() {
-            const select = document.getElementById('modal-day-select');
-            let html = '';
-            for(let i=1; i<=totalDays; i++) html += `<option value="${i}">${i}일차 (${appData[i].date})</option>`;
-            select.innerHTML = html;
-        }
-
         function renderMapTabs() {
             let html = '';
             for(let i=1; i<=totalDays; i++) {
-                html += `<button onclick="window.selectMapDay(${i})" id="mtab-${i}" class="tab-btn px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 border-transparent text-gray-500 hover:text-blue-600 transition">${i}일차</button>`;
+                html += `<button onclick="selectMapDay(${i})" id="mtab-${i}" class="tab-btn px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 border-transparent text-gray-500 hover:text-blue-600 transition">${i}일차</button>`;
             }
             document.getElementById('map-tabs').innerHTML = html;
         }
 
-        window.selectMapDay = function(dayIndex) {
+        function selectMapDay(dayIndex) {
             if(!appData[dayIndex]) return;
             currentDay = dayIndex;
             document.querySelectorAll('.tab-btn').forEach(b => b.className = "tab-btn px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 border-transparent text-gray-500 hover:text-blue-600 transition");
@@ -414,6 +491,8 @@
 
             for(let i=1; i<=totalDays; i++) {
                 const data = appData[i];
+                if(!data) continue; 
+                
                 html += `
                 <div class="mb-5 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div class="bg-gray-100 px-4 py-3 border-b font-bold text-gray-700 flex justify-between items-center">
@@ -432,8 +511,8 @@
                                 <div class="font-bold text-gray-900 truncate">${loc.name}</div>
                             </div>
                             <div class="flex gap-1 shrink-0">
-                                <button onclick="window.openModal(${i}, ${index})" class="w-8 h-8 text-blue-500 hover:bg-blue-50 rounded-full flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
-                                <button onclick="window.confirmDelete(${i}, ${index})" class="w-8 h-8 text-red-500 hover:bg-red-50 rounded-full flex items-center justify-center"><i class="fa-solid fa-trash-can"></i></button>
+                                <button onclick="openModal(${i}, ${index})" class="w-8 h-8 text-blue-500 hover:bg-blue-50 rounded-full flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
+                                <button onclick="confirmDelete(${i}, ${index})" class="w-8 h-8 text-red-500 hover:bg-red-50 rounded-full flex items-center justify-center"><i class="fa-solid fa-trash-can"></i></button>
                             </div>
                         </div>
                     `;
@@ -484,11 +563,11 @@
             }
         }
 
-        window.searchPlace = async function() {
+        async function searchPlace() {
             const query = document.getElementById('place-search').value.trim();
             if(!query) { showToast('검색어를 입력해주세요.'); return; }
             
-            const btn = document.querySelector('button[onclick="window.searchPlace()"]');
+            const btn = document.querySelector('button[onclick="searchPlace()"]');
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
             
             try {
@@ -518,7 +597,7 @@
             }
         }
 
-        window.openModal = function(day = 1, index = null) {
+        function openModal(day = 1, index = null) {
             initModalMap();
             const isEdit = index !== null;
             document.getElementById('modal-title').innerText = isEdit ? '장소 수정' : '새 장소 추가';
@@ -529,9 +608,9 @@
             let defaultLat = day >= 6 ? 52.3791 : 51.5074; 
             let defaultLng = day >= 6 ? 4.9003 : -0.1278;
 
-            if (isEdit) {
+            if (isEdit && appData[day].locations[index]) {
                 const loc = appData[day].locations[index];
-                document.getElementById('modal-name').value = loc.name;
+                document.getElementById('modal-name').value = loc.name || '';
                 document.getElementById('modal-time').value = loc.time || '';
                 document.getElementById('modal-desc').value = loc.desc || '';
                 document.getElementById('place-search').value = ''; 
@@ -548,15 +627,17 @@
             document.getElementById('edit-modal').classList.remove('hidden');
             
             setTimeout(() => {
-                modalMap.invalidateSize();
-                modalMap.setView([defaultLat, defaultLng], 13);
-                modalMarker.setLatLng([defaultLat, defaultLng]);
+                if(modalMap) {
+                    modalMap.invalidateSize();
+                    modalMap.setView([defaultLat, defaultLng], 13);
+                    modalMarker.setLatLng([defaultLat, defaultLng]);
+                }
             }, 150);
         }
 
-        window.closeModal = function() { document.getElementById('edit-modal').classList.add('hidden'); }
+        function closeModal() { document.getElementById('edit-modal').classList.add('hidden'); }
 
-        window.saveLocation = function() {
+        function saveLocation() {
             const name = document.getElementById('modal-name').value.trim();
             if(!name) { showToast('장소명을 입력해주세요.'); return; }
 
@@ -565,7 +646,7 @@
             const index = document.getElementById('modal-index').value;
 
             const newLoc = {
-                id: index !== '' ? appData[oldDay].locations[index].id : Date.now(),
+                id: index !== '' && appData[oldDay].locations[index] ? appData[oldDay].locations[index].id : Date.now(),
                 name: name,
                 time: document.getElementById('modal-time').value,
                 desc: document.getElementById('modal-desc').value,
@@ -592,11 +673,11 @@
         }
 
         let pendingDelete = null;
-        window.confirmDelete = function(day, index) {
+        function confirmDelete(day, index) {
             pendingDelete = { day, index };
             document.getElementById('confirm-modal').classList.remove('hidden');
         }
-        window.closeConfirmModal = function() {
+        function closeConfirmModal() {
             pendingDelete = null;
             document.getElementById('confirm-modal').classList.add('hidden');
         }
