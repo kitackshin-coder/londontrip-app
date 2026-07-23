@@ -9,9 +9,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#1e3a8a">
     
+    <!-- CSS 최적화: 비동기 로딩을 통한 렌더링 차단 방지 -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
     <style>
@@ -50,20 +51,20 @@
 <body class="bg-gray-50 app-container relative">
 
     <!-- 초기 로딩 오버레이 -->
-    <div id="loading-overlay" class="fixed inset-0 bg-blue-900 z-[100] flex flex-col items-center justify-center text-white transition-opacity duration-500">
+    <div id="loading-overlay" class="fixed inset-0 bg-blue-900 z-[100] flex flex-col items-center justify-center text-white transition-opacity duration-300">
         <i class="fa-solid fa-cloud-arrow-down text-5xl mb-4"></i>
-        <h2 class="text-xl font-bold mb-2">여행 일정 동기화 중...</h2>
+        <h2 class="text-xl font-bold mb-2">데이터 확인 중...</h2>
         <div class="loader mt-4"></div>
     </div>
 
     <!-- 토스트 알림 -->
-    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl transition-opacity duration-300 opacity-0 pointer-events-none z-[100] font-bold text-sm text-center min-w-[200px]"></div>
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl transition-opacity duration-300 opacity-0 pointer-events-none z-[100] font-bold text-sm text-center min-w-[200px] whitespace-nowrap"></div>
 
     <!-- 1. HOME VIEW -->
     <div id="view-home" class="absolute inset-0 z-40 bg-gray-50 flex flex-col transition-opacity duration-300 opacity-0 hidden">
         <div class="pt-12 pb-8 px-6 bg-blue-900 text-white rounded-b-3xl shadow-lg relative">
-            <div class="absolute top-4 right-6 text-xs bg-blue-800 px-3 py-1 rounded-full flex items-center gap-2">
-                <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div> 실시간 동기화 중
+            <div id="sync-status" class="absolute top-4 right-6 text-xs bg-blue-800 px-3 py-1 rounded-full flex items-center gap-2 transition-colors duration-300">
+                <div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" id="sync-dot"></div> <span id="sync-text">연결 중...</span>
             </div>
             <h1 class="text-3xl font-black mb-2 tracking-tight mt-4"><i class="fa-solid fa-plane-departure mr-2"></i>유럽 여행</h1>
             <p class="text-blue-200 font-medium opacity-90">런던 ➔ 암스테르담 (7.24 ~ 8.1)</p>
@@ -184,8 +185,8 @@
         </div>
     </div>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet JS (defer for faster loading) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
     
     <!-- Firebase Module Script -->
     <script type="module">
@@ -193,7 +194,7 @@
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase 설정 (환경 변수 사용)
+        // 환경 변수 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'trip-app-id';
         let firebaseConfig = {};
         try { if (typeof __firebase_config !== 'undefined') firebaseConfig = JSON.parse(__firebase_config); } catch(e) {}
@@ -202,7 +203,7 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // 기본 데이터 (최초 1회 생성용)
+        // 기본 데이터
         const defaultAppData = {
             1: { date: "7.24 (금)", title: "런던 도착", locations: [ { id: 101, name: "히드로 공항", lat: 51.4700, lng: -0.4543, time: "17:20", desc: "쓰리심 픽업, 코스타 대기" }, { id: 102, name: "킴튼 피츠로이 호텔", lat: 51.5225, lng: -0.1251, time: "19:00", desc: "체크인 및 휴식" } ] },
             2: { date: "7.25 (토)", title: "시내 투어", locations: [ { id: 201, name: "웨스트민스터역 4번출구", lat: 51.5014, lng: -0.1250, time: "08:40", desc: "카페 네로 앞 가이드 미팅" }, { id: 202, name: "대영박물관", lat: 51.5194, lng: -0.1270, time: "13:30", desc: "정문 건너편 스벅 (쉑쉑버거)" } ] },
@@ -233,7 +234,45 @@
             setTimeout(() => t.classList.add('opacity-0'), 2500);
         }
 
-        // 인증 프로세스 (필수)
+        // 로딩 화면 숨기기 (속도 개선)
+        function hideLoadingScreen() {
+            if(isAppReady) return;
+            initMapUI();
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.add('opacity-0');
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                document.getElementById('view-home').classList.remove('hidden');
+                setTimeout(() => document.getElementById('view-home').classList.remove('opacity-0'), 50);
+            }, 200); // 딜레이 단축
+            isAppReady = true;
+        }
+
+        // 상단 동기화 상태 배지 업데이트
+        function updateSyncStatus(isSynced) {
+            const dot = document.getElementById('sync-dot');
+            const text = document.getElementById('sync-text');
+            if(isSynced) {
+                dot.className = "w-2 h-2 bg-green-400 rounded-full";
+                text.innerText = "동기화 완료";
+            } else {
+                dot.className = "w-2 h-2 bg-yellow-400 rounded-full animate-pulse";
+                text.innerText = "연결 중...";
+            }
+        }
+
+        
+        // 1단계: 기다리지 않고 저장된 '로컬 데이터' 즉시 렌더링
+        const cachedData = localStorage.getItem('tripApp_cacheData');
+        if (cachedData) {
+            try {
+                appData = JSON.parse(cachedData);
+                totalDays = Object.keys(appData).length;
+                hideLoadingScreen(); // 캐시가 있으면 0초 렌더링
+            } catch(e) {}
+        }
+
+        // 2단계: 인증 및 Firebase 백그라운드 연결
         async function initAuth() {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                 await signInWithCustomToken(auth, __initial_auth_token);
@@ -241,42 +280,42 @@
                 await signInAnonymously(auth);
             }
         }
+        initAuth();
 
-        // 클라우드 데이터 동기화
+        // 3단계: 클라우드 동기화 (백그라운드에서 조용히 업데이트)
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'itinerary', 'shared');
                 
                 onSnapshot(docRef, (snapshot) => {
+                    updateSyncStatus(true);
+                    
                     if (snapshot.exists()) {
-                        appData = snapshot.data();
+                        const newData = snapshot.data();
+                        // 로컬 데이터와 다를 경우에만 UI 업데이트 (불필요한 리렌더링 방지)
+                        if(JSON.stringify(appData) !== JSON.stringify(newData)) {
+                            appData = newData;
+                            totalDays = Object.keys(appData).length;
+                            localStorage.setItem('tripApp_cacheData', JSON.stringify(appData)); // 캐시 갱신
+                            
+                            if (!isAppReady) {
+                                hideLoadingScreen();
+                            } else {
+                                refreshCurrentView();
+                                showToast("☁️ 새 일정이 동기화되었습니다.");
+                            }
+                        }
                     } else {
-                        // 최초 접속 시 기본 데이터 클라우드에 세팅
-                        appData = defaultAppData;
-                        setDoc(docRef, defaultAppData);
-                    }
-                    
-                    totalDays = Object.keys(appData).length;
-                    
-                    if (!isAppReady) {
-                        initMapUI();
-                        // 로딩 화면 숨기고 홈 화면 표시
-                        const overlay = document.getElementById('loading-overlay');
-                        overlay.classList.add('opacity-0');
-                        setTimeout(() => {
-                            overlay.classList.add('hidden');
-                            document.getElementById('view-home').classList.remove('hidden');
-                            setTimeout(() => document.getElementById('view-home').classList.remove('opacity-0'), 50);
-                        }, 500);
-                        isAppReady = true;
-                    } else {
-                        // 실시간 업데이트 반영
-                        refreshCurrentView();
-                        showToast("☁️ 클라우드 동기화 완료");
+                        // 최초 1회 클라우드 세팅
+                        appData = appData || defaultAppData;
+                        setDoc(docRef, appData);
+                        localStorage.setItem('tripApp_cacheData', JSON.stringify(appData));
+                        if (!isAppReady) hideLoadingScreen();
                     }
                 }, (error) => {
                     console.error("Firestore Error:", error);
-                    showToast("데이터를 불러오지 못했습니다.");
+                    updateSyncStatus(false);
+                    if(!isAppReady) showToast("데이터 연동 지연중. 오프라인 모드로 실행됩니다.");
                 });
             }
         });
@@ -284,20 +323,26 @@
         // 클라우드 저장 함수
         async function syncDataToCloud() {
             if(!appData) return;
+            localStorage.setItem('tripApp_cacheData', JSON.stringify(appData)); // 로컬 즉시 갱신
+            updateSyncStatus(false);
+            
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'itinerary', 'shared');
             try {
                 await setDoc(docRef, appData);
+                updateSyncStatus(true);
             } catch(e) {
-                showToast("저장에 실패했습니다. 권한을 확인해주세요.");
+                showToast("저장 권한이 없거나 네트워크가 불안정합니다.");
             }
         }
 
-        // 앱 초기 시작
-        initAuth();
-
-        // ------------------ UI 및 로직 함수들 ------------------
 
         function initMapUI() {
+            // Leaflet 객체가 로드되었는지 체크 후 지연 실행 방지
+            if(typeof L === 'undefined') {
+                setTimeout(initMapUI, 100);
+                return;
+            }
+            
             map = L.map('map', { zoomControl: false }).setView([51.5074, -0.1278], 12);
             L.control.zoom({ position: 'topright' }).addTo(map);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -324,7 +369,7 @@
             currentActiveView = viewId;
 
             if (viewId === 'view-map') {
-                setTimeout(() => map.invalidateSize(), 100);
+                setTimeout(() => map.invalidateSize(), 50); // 반응속도 향상
                 renderMapTabs();
                 selectMapDay(currentDay);
             } else if (viewId === 'view-manage') {
@@ -341,7 +386,6 @@
             select.innerHTML = html;
         }
 
-        // MAP VIEW
         function renderMapTabs() {
             let html = '';
             for(let i=1; i<=totalDays; i++) {
@@ -399,7 +443,6 @@
             if((data.locations || []).length > 0) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
         }
 
-        // MANAGE VIEW (Drag & Drop)
         function renderManageBoard() {
             const board = document.getElementById('manage-board');
             let html = '';
@@ -453,16 +496,14 @@
                         if(!appData[newDay].locations) appData[newDay].locations = [];
                         appData[newDay].locations.splice(newIndex, 0, item);
                         
-                        // 화면 임시 업데이트 및 클라우드 전송
-                        syncDataToCloud();
-                        renderManageBoard();
+                        renderManageBoard(); // UI 즉시 반영
+                        syncDataToCloud(); // 클라우드 동기화 
                     }
                 });
                 sortables.push(sortable);
             });
         }
 
-        // 모달 및 지도 검색
         function initModalMap() {
             if(!modalMap) {
                 modalMap = L.map('modal-map', { zoomControl: false }).setView([51.5074, -0.1278], 12);
@@ -583,10 +624,9 @@
                 appData[newDay].locations.push(newLoc);
             }
             
-            // 클라우드 저장 트리거
-            syncDataToCloud();
             closeModal();
             renderManageBoard(); // 로컬 먼저 반영
+            syncDataToCloud(); // 클라우드 저장 트리거
         }
 
         // 삭제 로직
@@ -603,9 +643,9 @@
         document.getElementById('confirm-delete-btn').addEventListener('click', () => {
             if(pendingDelete) {
                 appData[pendingDelete.day].locations.splice(pendingDelete.index, 1);
-                syncDataToCloud(); // 클라우드 저장
                 renderManageBoard();
                 closeConfirmModal();
+                syncDataToCloud(); // 클라우드 저장
             }
         });
 
